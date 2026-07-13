@@ -19,7 +19,7 @@ Built with **Node.js, TypeScript and Fastify**, backed by **PostgreSQL** (via Pr
 
 ## Quick start
 
-Requirements: Node.js 20+, npm, and Docker (for PostgreSQL) — the database is not optional,
+Requirements: Node.js 20+, npm, and Docker - the database is not optional,
 see [Database](#database).
 
 ```bash
@@ -29,7 +29,7 @@ cp .env.example .env              # then edit JWT_SECRET etc. for your environme
 docker compose up -d db           # starts a local PostgreSQL
 npm run db:migrate                # applies the schema
 npm run db:seed                   # imports data/locations.json into it (optional, but handy)
-
+npm run db:seed -- ./data/locations_big.json # seeds other source file
 npm run dev                       # starts the API on http://localhost:3000 with reload
 ```
 
@@ -210,9 +210,8 @@ process that can't reach Postgres is not actually able to serve traffic:
 
 ## Database
 
-**PostgreSQL is the only runtime datasource.** The app refuses to start without a working
-`DATABASE_URL` - there is no in-memory or file-backed fallback mode. JSON files under `data/`
-are seed/import input only, loaded exclusively by the explicit `npm run db:seed` command below;
+**PostgreSQL as database is the runtime datasource. To simplify and keep operational logic in one place, choose to use one datasource and for datasource choose PostgreSQL so that can get the benefit of indexes and 'search' will do better perfomance in millions of data rather then Json file.**   
+System first imports the data from JSON files under `data/`, loaded exclusively by the explicit `npm run db:seed` command below;
 nothing in `app.ts`/`server.ts` ever reads them, so nothing auto-imports on startup.
 
 ```bash
@@ -255,7 +254,7 @@ Other useful commands:
   (`prisma/schema.prisma` is the source of truth; hand-edit it, then run this to generate SQL).
 - `npm run db:studio` — Prisma Studio, a local GUI for inspecting the `restaurants` table.
 
-### Swapping PostgreSQL for another RDBMS
+### Swapping PostgreSQL for another RDBMS (If clients demand to choose any other RDBMS)
 
 `PrismaLocationsRepository` (the only runtime repository) is written entirely against Prisma's
 query builder (`findMany`/`upsert`/`aggregate`) - it never drops to raw SQL. Swapping the
@@ -305,7 +304,7 @@ src/
   layer, and validation happens in Fastify's own request lifecycle rather than bolted on
   afterward.
 
-- **PostgreSQL is the only runtime datasource, behind a repository interface.**
+- **PostgreSQL is runtime datasource, behind a repository interface.**
   `LocationsService` and the controllers depend only on `LocationsRepositoryPort` (`getAll`,
   `getById`, `candidatesNear`, `upsert` — see `locations.repository.types.ts`), never on Prisma
   or Postgres directly. The port still earns its keep with a single concrete adapter
@@ -315,7 +314,7 @@ src/
   RDBMS or ORM swap from rippling into the service/controller layers - see
   [Swapping PostgreSQL for another RDBMS](#swapping-postgresql-for-another-rdbms).
 
-- **The search algorithm lives entirely in the database now.** `candidatesNear` bounds its scan
+- **The search algorithm lives entirely in the database.** `candidatesNear` bounds its scan
   to a box sized by the largest radius currently in the dataset (`x`/`y` within `±maxRadius` of
   the query point), so the `@@index([x, y])` on the `restaurants` table prunes the range scan
   instead of a full table scan - cost scales with *local density* around the query point, not
