@@ -1,0 +1,70 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: find_nearest_restaurant
+    ports:
+      - '5432:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # One-off job: applies prisma/migrations, then exits. Runs automatically before `app` starts
+  # (via depends_on below), and can also be run on its own: `docker compose run --rm migrate`.
+  migrate:
+    build:
+      context: .
+      target: build
+    env_file: .env
+    environment:
+      # Overrides .env's DATABASE_URL (which points at localhost, correct for running the app
+      # on the host) - inside the compose network, Postgres is reachable at the `db` hostname.
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/find_nearest_restaurant
+    command: ['npm', 'run', 'db:migrate']
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # One-off job, NOT started by a plain `docker compose up` (profile-gated - seeding must stay
+  # a deliberate, separate action, matching the CLI's own "never automatic" behavior). Run it
+  # explicitly: `docker compose run --rm seed` (optionally `-- ./data/locations_big.json`).
+  seed:
+    build:
+      context: .
+      target: build
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/find_nearest_restaurant
+    command: ['npm', 'run', 'db:seed']
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    profiles: ['seed']
+
+  app:
+    build:
+      context: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/find_nearest_restaurant
+      HOST: 0.0.0.0
+      # .env's NODE_ENV=development is correct for `npm run dev` on the host, but this image's
+      # runtime stage only installs production dependencies - pino-pretty (used for dev-mode
+      # log formatting) isn't there, so this container must always run in production mode.
+      NODE_ENV: production
+    ports:
+      - '3000:3000'
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  db-data:
