@@ -38,7 +38,7 @@
     "@sinclair/typebox": "^0.34.13",
     "close-with-grace": "^2.2.0",
     "dotenv": "^17.4.2",
-    "fastify": "^5.2.1",
+    "fastify": "^5.12.1",
     "fastify-plugin": "^5.0.1",
     "pino": "^9.6.0"
   },
